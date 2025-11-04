@@ -11,11 +11,23 @@ transfi/
 dist/
 build/
 
+# Model files (too large for git)
+models/
+*.bin
+*.safetensors
+*.h5
+*.onnx
+*.ot
+*.sqlite3
+
 # Data files
 data/documents.json
 pages.json
 *.html
 *.json.bak
+data/vector_db/
+data/raw/
+data/cleaned/
 
 # IDE
 .vscode/
