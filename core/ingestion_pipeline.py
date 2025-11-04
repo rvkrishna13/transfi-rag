@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List
 from dataclasses import asdict
 
-from core.embeddings import Embeddings
+from core.embeddings import get_embeddings
 from core.text_processor import TextProcessor
 from core.document import Document, DocumentMetadata
 from core.vector_db import VectorDB
@@ -92,20 +92,16 @@ def save_cleaned_text(pages: List[dict], processed_bodies: List[str], base_dir: 
 class DataIngestionPipeline:
     """Handles the complete pipeline: scrape -> process -> embed -> store."""
     
-    def __init__(self, clear_collection: bool = True):
+    def __init__(self, clear_collection: bool = True, max_depth: int = 3):
         self.text_processor = TextProcessor()
-        self.embeddings = Embeddings()
+        self.embeddings = get_embeddings()
         self.vector_db = VectorDB()
-
-        if clear_collection:
-            self.vector_db.drop_collection()
-            logger.info("Vector DB collection cleared")
+        self.max_depth = max_depth
     
     async def scrape_pages(
         self, 
         url: str, 
-        page_types: List[str] = None,
-        max_depth: int = 1
+        page_types: List[str] = None
     ) -> tuple[List[dict], dict, List[Document]]:
         """
         Scrape pages, process them through pipeline, and return data + stats + documents.
@@ -116,8 +112,8 @@ class DataIngestionPipeline:
                 - stats: Scraping statistics
                 - all_documents: List of all Document objects created (one per chunk)
         """
-        async with AsyncWebScraper(max_depth=max_depth) as scraper:
-            logger.info("Scraping started: url=%s, page_types=%s, max_depth=%s", url, page_types, max_depth)
+        async with AsyncWebScraper(max_depth=self.max_depth) as scraper:
+            logger.info("Scraping started: url=%s, page_types=%s, max_depth=%s", url, page_types, self.max_depth)
             pages = await scraper.discover_and_scrape_pages(
                 url,
                 page_types=page_types or ["products", "solutions"]
@@ -223,8 +219,7 @@ class DataIngestionPipeline:
     async def run(
         self, 
         url: str,
-        page_types: List[str] = None,
-        max_depth: int = 1
+        page_types: List[str] = None
     ) -> dict:
         """
         Run the complete pipeline and return metrics.
@@ -235,7 +230,7 @@ class DataIngestionPipeline:
 
         scrape_start = time.time()
         try:
-            pages, stats, all_documents = await self.scrape_pages(url, page_types, max_depth)
+            pages, stats, all_documents = await self.scrape_pages(url, page_types)
         except Exception as e:
             pipeline_errors.append({
                 'type': 'scrape_pipeline_error',
@@ -248,7 +243,7 @@ class DataIngestionPipeline:
         index_start = time.time()
         try:
             if all_documents:
-                await self.vector_db.add_data(all_documents)
+                await self.vector_db.add_documents(all_documents)
                 logger.info("Stored %d chunk documents in vector DB", len(all_documents))
         except Exception as e:
             pipeline_errors.append({

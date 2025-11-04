@@ -1,5 +1,6 @@
 from typing import List, Optional
 import threading
+import asyncio
 import chromadb
 from chromadb.config import Settings
 
@@ -11,7 +12,7 @@ class VectorDB:
     
     _instance = None
     _lock = threading.Lock()
-    _write_lock = threading.Lock()
+    # Class-level lock for initialization; per-instance async lock for writes
     
     def __new__(
         cls,
@@ -49,6 +50,8 @@ class VectorDB:
                 name=collection_name,
                 metadata={"hnsw:space": "cosine"}
             )
+            # Per-instance async lock for write operations
+            self._async_lock = asyncio.Lock()
             self._initialized = True
     
     async def add_data(self, documents: List[Document]) -> None:
@@ -61,7 +64,6 @@ class VectorDB:
         
         Stores each chunk as separate entry with metadata tracking parent document.
         """
-
         if not documents:
             return
         
@@ -154,8 +156,8 @@ class VectorDB:
                     metadata={"hnsw:space": "cosine"}
                 )
     
-    async def ingest_data(self, documents: List[Document]) -> None:
+    async def add_documents(self, documents: List[Document]) -> None:
         """Ingest data into the vector database."""
-        async with self.write_lock:
+        async with self._async_lock:
             await self.drop_collection()
             await self.add_data(documents)

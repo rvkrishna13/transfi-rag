@@ -125,7 +125,6 @@ async def start_ingestion(request: IngestRequest) -> dict:
                 result = await pipeline.run(
                     url=url,
                     page_types=["products", "solutions"],
-                    max_depth=1
                 )
                 metrics = result.get("metrics", {})
                 metrics["job_id"] = job_id
@@ -284,9 +283,15 @@ async def process_batch_query(request: BatchQueryRequest) -> BatchQueryResponse:
 
 def process_webhook(request: WebhookRequest):
     type = request.type
+    now_ts = datetime.now().isoformat()
+    print(f"[Webhook] Received at: {now_ts} | type={type}")
 
     if type == "ingestion":
         urls = request.payload.urls
+        payload_ts = getattr(request.payload, 'timestamp', None)
+        if payload_ts:
+            print(f"[Webhook] Payload timestamp: {payload_ts}")
+
         metrics = request.payload.metrics
 
         for url, metric in zip(urls, metrics):
@@ -296,6 +301,9 @@ def process_webhook(request: WebhookRequest):
     elif type == "batch_query":
         results = request.payload.results
         metrics = request.payload.metrics
+        payload_ts = getattr(request.payload, 'timestamp', None)
+        if payload_ts:
+            print(f"[Webhook] Payload timestamp: {payload_ts}")
 
         for idx, result in enumerate(results):
             is_last = idx == len(results) - 1
@@ -304,5 +312,6 @@ def process_webhook(request: WebhookRequest):
             metrics_obj = QueryMetrics(**metrics)
         else:
             metrics_obj = metrics
+        print(f"[Webhook] Aggregated metrics printed at: {datetime.now().isoformat()}")
         print(format_metrics(metrics_obj))
         print("\n" + ("-" * 80) + "\n")

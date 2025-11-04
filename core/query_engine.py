@@ -7,7 +7,7 @@ import asyncio
 from typing import List, Dict, Any, Tuple, Optional
 from pydantic import BaseModel
 
-from core.embeddings import Embeddings
+from core.embeddings import get_embeddings
 from core.vector_db import VectorDB
 from core.llm_client import LLMClient
 
@@ -36,7 +36,7 @@ class QueryEngine:
     
     def __init__(self):
         """Initialize query engine with singleton instances."""
-        self.embeddings = Embeddings()
+        self.embeddings = get_embeddings()
         self.vectordb = VectorDB()
         self.llm = LLMClient(model=self.MODEL)
         logger.info("QueryEngine initialized - model loaded into memory")
@@ -189,8 +189,18 @@ class QueryEngine:
         concurrent: bool = False,
     ) -> List[Dict[str, Any]]:
         """Run multiple queries, optionally concurrently."""
-        tasks = [self.answer_question(q.strip()) for q in questions if q and q.strip()]
-        return await asyncio.gather(*tasks)
+        questions = [q.strip() for q in questions if q and q.strip()]
+        if concurrent:
+            # Run all queries concurrently
+            tasks = [self.answer_question(q) for q in questions]
+            return await asyncio.gather(*tasks)
+        else:
+            # Run queries sequentially (one after another)
+            results = []
+            for q in questions:
+                result = await self.answer_question(q)
+                results.append(result)
+            return results
 
 
 _engine_instance = QueryEngine()

@@ -18,31 +18,37 @@ A Retrieval-Augmented Generation (RAG) system for answering questions about Tran
 ```
 transfi-rag/
 ├── core/                          # Core RAG components
-│   ├── scraper.py                # Web scraping logic
-│   ├── text_processor.py         # Text processing & cleaning
-│   ├── embeddings.py             # Embedding generation
-│   ├── vector_db.py              # Vector database operations
-│   ├── llm_client.py             # LLM integration (Gemini)
-│   ├── query_engine.py           # Query processing engine
-│   ├── ingestion_pipeline.py     # Complete ingestion pipeline
-│   ├── utils.py                  # Shared utility functions
-│   └── document.py               # Document models
+│   ├── scraper.py                # Async web scraping with depth-first traversal
+│   ├── text_processor.py         # HTML to text conversion and cleaning
+│   ├── embeddings.py             # Sentence-transformers embedding generation
+│   ├── vector_db.py              # ChromaDB vector database operations (singleton)
+│   ├── llm_client.py             # Google Gemini LLM integration
+│   ├── query_engine.py           # RAG query processing engine (singleton)
+│   ├── ingestion_pipeline.py     # Complete ingestion pipeline (scrape → process → embed → store)
+│   ├── utils.py                  # Shared utility functions (formatting, metrics)
+│   └── document.py               # Document and metadata models (Pydantic)
 ├── api/                           # API layer
-│   ├── models.py                 # Pydantic models
-│   └── services.py               # Business logic
-├── data/                          # Data storage
-│   ├── raw/                      # Raw HTML files (JSON format)
-│   ├── cleaned/                  # Cleaned text files
-│   └── vector_db/                # ChromaDB vector database
+│   ├── models.py                 # Pydantic request/response models
+│   └── services.py               # Business logic and webhook handling
+├── data/                          # Data storage (gitignored)
+│   ├── raw/                      # Raw HTML files (JSON format per page)
+│   ├── cleaned/                  # Cleaned text files (.txt)
+│   └── vector_db/                # ChromaDB persistent vector database
+├── models/                        # Embedding models (gitignored)
+│   └── all-MiniLM-L6-v2/         # Sentence-transformers model (auto-downloaded)
 ├── test/                          # Test files
 │   └── questions.txt             # Sample questions for testing
+├── tests/                         # Unit tests
+│   ├── test_api.py              # API tests
+│   └── test_core.py             # Core functionality tests
 ├── fastapi_server.py             # FastAPI application (port 8000)
-├── webhook_receiver.py           # Webhook receiver (port 8001)
+├── webhook_receiver.py           # Webhook receiver server (port 8001)
 ├── ingest.py                     # CLI ingestion script
 ├── query.py                      # CLI query script
-├── Makefile                      # Build automation
+├── Makefile                      # Build automation commands
 ├── requirements.txt              # Python dependencies
-└── README.md
+├── .gitignore                    # Git ignore rules
+└── README.md                     # This file
 ```
 
 ## Environment Setup
@@ -87,9 +93,8 @@ transfi-rag/
 #### LLM Configuration
 
 The system uses **Google Gemini** for answer generation:
-- Model: `gemini-1.5-flash` (default)
-- API Key: Hardcoded in `core/llm_client.py`
-- Alternative model: `gemini-2.5-flash` (configurable in `core/llm_client.py`)
+- Model: `gemini-2.5-flash` (default, configured in `core/query_engine.py`)
+- API Key: Hardcoded in `core/llm_client.py` (set `GOOGLE_API_KEY` environment variable)
 
 #### Embedding Model
 
@@ -106,14 +111,15 @@ The system uses **Google Gemini** for answer generation:
 
 #### Query Configuration
 
-- `TOP_K`: Number of chunks to retrieve (default: 5)
-- Configured in `core/query_engine.py` as class constant
+- `TOP_K`: Number of chunks to retrieve (default: 10)
+- `MODEL`: LLM model name (default: "gemini-2.5-flash")
+- Configured in `core/query_engine.py` as class constants
 
 #### Scraping Configuration
 
-- `max_depth`: Maximum depth for depth-first scraping (default: 20)
-- `max_concurrent`: Concurrent requests limit (default: 10)
+- `max_depth`: Maximum depth for depth-first scraping (default: 20, passed via CLI/API)
 - `delay`: Delay between requests in seconds (default: 0.1)
+- Note: No semaphore limit - uses aiohttp's connection pooling
 
 ## Installation Instructions
 
@@ -155,9 +161,10 @@ python ingest.py --url https://www.transfi.com
 
 **Output:**
 - Vector database populated in `data/vector_db/`
-- Raw HTML files in `data/raw/`
-- Cleaned text files in `data/cleaned/`
+- Raw HTML files in `data/raw/` (JSON format, one per page)
+- Cleaned text files in `data/cleaned/` (TXT format, one per page)
 - Console logs showing progress
+- Final metrics summary printed at the end
 
 ### Script 2: Query (`query.py`)
 
@@ -181,7 +188,9 @@ python query.py --questions test/questions.txt --concurrent
 **Options:**
 - `--question`: Single question to ask
 - `--questions`: Path to file with questions (newline or JSON list)
-- `--concurrent`: Process multiple questions concurrently (flag)
+- `--concurrent`: Process multiple questions concurrently (flag, default: false)
+
+**Note:** All queries run concurrently without semaphore limits when using `--concurrent`
 
 **What it does:**
 1. Retrieves relevant chunks from vector database
@@ -318,18 +327,27 @@ python query.py --questions test/questions.txt --concurrent
 
 ```
 INFO:core.ingestion_pipeline:Scraping started: url=https://www.transfi.com, page_types=['products', 'solutions'], max_depth=1
-INFO:core.ingestion_pipeline:Scraping finished: pages=10, errors=0
-INFO:core.ingestion_pipeline:Saved raw HTML files to data/raw
-INFO:core.ingestion_pipeline:Processing content: pages=10
-INFO:core.ingestion_pipeline:Saved cleaned text files to data/cleaned
-INFO:core.ingestion_pipeline:Processing finished: combined=10
-INFO:core.ingestion_pipeline:Embedding generation started: docs=10
-INFO:core.ingestion_pipeline:Embedding generation finished: documents=10
-INFO:core.ingestion_pipeline:Step scrape: time=45.23s pages=10
-INFO:core.ingestion_pipeline:Step process: time=2.15s contents=10
-INFO:core.ingestion_pipeline:Step embed: time=12.34s chunks=150
-INFO:core.ingestion_pipeline:Step index: time=3.21s
-INFO:core.ingestion_pipeline:Pipeline finished: total=62.93s pages=10 chunks=150 tokens=50000
+INFO:core.ingestion_pipeline:Scraping finished: pages=17, errors=0
+INFO:core.ingestion_pipeline:Processing subpage: BizPay
+INFO:core.ingestion_pipeline:Processing subpage: Checkout
+...
+INFO:core.ingestion_pipeline:Pipeline finished: pages=17, total_chunk_documents=360
+INFO:core.ingestion_pipeline:Step scrape+process+embed: time=15.07s pages=17
+INFO:core.ingestion_pipeline:Stored 360 chunk documents in vector DB
+INFO:core.ingestion_pipeline:Step index: time=1.91s
+INFO:core.ingestion_pipeline:Pipeline finished: total=17.34s pages=17 chunks=360 tokens=140846
+
+=== Ingestion Metrics ===
+
+Total Time: 17.34s
+Pages Scraped: 17
+Pages Failed: 0
+Total Chunks Created: 360
+Total Tokens Processed: 140,846
+Embedding Generation Time: 15.07s
+Indexing Time: 1.91s
+Average Scraping Time per Page: 0.89s
+Errors: None
 ```
 
 ### Single Query Output
@@ -352,7 +370,7 @@ Metrics:
   Retrieval Time: 0.63s
   LLM Time: 2.77s
   Post-processing Time: 0.00s
-  Documents Retrieved: 5
+  Documents Retrieved: 10
   Documents Used in Answer: 3
   Input Tokens: 2067
   Output Tokens: 64
@@ -398,7 +416,7 @@ Metrics:
 {
   "question": "What is BizPay?",
   "answer": "BizPay is a unified, self-serve platform for global payments...",
-  "sources": [
+  "citations": [
     {
       "url": "https://www.transfi.com/products/bizpay",
       "snippet": "BizPay enables businesses to..."
@@ -409,7 +427,7 @@ Metrics:
     "retrieval_time_s": 0.63,
     "llm_time_s": 2.77,
     "post_time_s": 0.0,
-    "docs_retrieved": 5,
+    "docs_retrieved": 10,
     "docs_used": 3,
     "input_tokens": 2067,
     "output_tokens": 64,
@@ -469,9 +487,10 @@ Metrics:
 ### Ingestion Configuration
 
 **Scraper settings** (in `core/scraper.py`):
-- `max_concurrent`: Maximum concurrent HTTP requests (default: 10)
+- `max_concurrent`: Parameter kept for compatibility but not used (no semaphore)
 - `delay`: Delay between requests in seconds (default: 0.1)
 - `max_depth`: Maximum depth for depth-first scraping (default: 20, passed via CLI/API)
+- Uses `aiohttp` connection pooling for concurrent requests
 
 **Page types** (default in `core/ingestion_pipeline.py`):
 - Default: `["products", "solutions"]`
@@ -480,12 +499,13 @@ Metrics:
 ### Query Configuration
 
 **Query Engine settings** (in `core/query_engine.py`):
-- `TOP_K`: Number of chunks to retrieve (default: 5, class constant)
-- `MODEL`: LLM model name (default: "gemini-1.5-flash")
+- `TOP_K`: Number of chunks to retrieve (default: 10, class constant)
+- `MODEL`: LLM model name (default: "gemini-2.5-flash")
+- `SIMILARITY_THRESHOLD`: Not used (all retrieved documents passed to LLM)
 
 **Concurrency**:
-- Single question: Sequential processing
-- Batch queries: Optional concurrent processing via `--concurrent` flag
+- All queries run concurrently without semaphore limits
+- Uses `asyncio.gather()` for parallel execution
 
 ### API Configuration
 
@@ -502,8 +522,8 @@ Metrics:
 
 **Model** (in `core/embeddings.py`):
 - Default: `all-MiniLM-L6-v2`
-- Chunk size: 512 tokens
-- Max workers: 5 (configurable)
+- Chunk size: 400 tokens (with 80 token overlap)
+- Location: `./models/all-MiniLM-L6-v2/` (auto-downloaded on first use)
 
 ## Makefile Commands
 
@@ -604,7 +624,7 @@ python query.py --questions test/questions.txt --concurrent
 }
 ```
 
-**Naming:** `{sanitized_title}.json` and `{sanitized_title}.html`
+**Naming:** `{sanitized_title}.json` (HTML content stored within JSON)
 
 ### Cleaned Text Files
 
@@ -634,12 +654,13 @@ python query.py --questions test/questions.txt --concurrent
 
 ### Key Components
 
-1. **AsyncWebScraper**: Depth-first web scraping with concurrency control
+1. **AsyncWebScraper**: Depth-first web scraping with async HTTP requests
 2. **TextProcessor**: HTML to text conversion and cleaning
-3. **Embeddings**: Sentence-transformers for text embedding
-4. **VectorDB**: ChromaDB singleton for vector storage
+3. **Embeddings**: Sentence-transformers for text embedding and chunking
+4. **VectorDB**: ChromaDB singleton for vector storage (persistent)
 5. **QueryEngine**: Singleton query engine with LLM integration
 6. **LLMClient**: Google Gemini API client
+7. **DataIngestionPipeline**: Orchestrates scraping, processing, embedding, and storage
 
 ### Singleton Pattern
 
@@ -673,18 +694,11 @@ See `requirements.txt` for complete dependencies.
 **Key dependencies:**
 - `fastapi` - Web framework
 - `uvicorn` - ASGI server
-- `chromadb` - Vector database
-- `sentence-transformers` - Embeddings
-- `google-generativeai` - Gemini API
+- `chromadb` - Vector database (persistent)
+- `sentence-transformers` - Embeddings (all-MiniLM-L6-v2)
+- `google-generativeai` - Gemini API (gemini-2.5-flash)
 - `aiohttp` - Async HTTP client
 - `beautifulsoup4` - HTML parsing
 - `click` - CLI framework
 - `pydantic` - Data validation
-
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
+- `trafilatura` - Text extraction from HTML

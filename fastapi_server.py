@@ -38,9 +38,8 @@ def read_root():
     return {"message": "RAG System is running"}
 
 @app.post("/api/ingest")
-def ingest_data(request: IngestRequest):
-    start_ingestion(request)
-    return {"message": "Ingestion Started"}
+async def ingest_data(request: IngestRequest):
+    return await start_ingestion(request)
 
 @app.post("/api/query")
 async def query(request: QueryRequest):

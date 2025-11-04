@@ -52,7 +52,7 @@ class IngestionWebhookPayload(BaseModel):
     status: str  # "success" or "failed"
     job_id: str
     urls: List[str]
-    metrics: Optional[dict] = None
+    metrics: Optional[List[dict]] = None
     error: Optional[str] = None
 
 

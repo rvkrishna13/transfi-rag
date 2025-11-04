@@ -1,22 +1,17 @@
-# Core dependencies
+# Web scraping
 aiohttp>=3.8.0
 beautifulsoup4>=4.11.0
 lxml>=4.9.0
-aiofiles>=23.0.0
 
 # Text processing
-nltk>=3.8.0
-spacy>=3.5.0
+trafilatura>=2.0.0
 tiktoken>=0.5.0
 
 # Embeddings and vector store
-openai>=1.0.0
 sentence-transformers>=2.2.0
 chromadb>=0.4.0
-faiss-cpu>=1.7.4
 
 # LLM
-anthropic>=0.7.0
 google-generativeai>=0.7.0
 
 # API and web framework
@@ -26,14 +21,4 @@ pydantic>=2.0.0
 
 # CLI and utilities
 click>=8.1.0
-rich>=13.0.0
-python-dotenv>=1.0.0
 httpx>=0.24.0
-
-# Development and testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-black>=23.0.0
-flake8>=6.0.0
-
-trafilatura==2.0.0

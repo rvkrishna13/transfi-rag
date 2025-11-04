@@ -11,6 +11,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 logger = logging.getLogger(__name__)
 
 class Embeddings:
+    """Singleton embeddings model for text chunking and embedding generation."""
+    
     def __init__(self, chunk_size: int = 400, overlap: int = 80, max_workers: int = 10):
         self.model_name = './models/all-MiniLM-L6-v2'
         self.model = SentenceTransformer(self.model_name)
@@ -19,6 +21,8 @@ class Embeddings:
         self.overlap = overlap
         self.max_workers = max_workers
         self.max_batch_size = 32
+        # Lowercase only for embedding to stabilize retrieval while preserving original text for display
+        self.lowercase_for_embedding = True
 
     def chunk_text(self, text: str) -> List[str]:
         tokens = self.tokenizer.tokenize(text)
@@ -47,7 +51,13 @@ class Embeddings:
         """
         all_embeddings = []
         
-        batches = [chunked_document[i:i+self.max_batch_size] for i in range(0, len(chunked_document), self.max_batch_size)]
+        # Apply lowercasing at encode-time only
+        if self.lowercase_for_embedding:
+            to_encode = [c.casefold() for c in chunked_document]
+        else:
+            to_encode = chunked_document
+
+        batches = [to_encode[i:i+self.max_batch_size] for i in range(0, len(to_encode), self.max_batch_size)]
         
         for batch in batches:
             try:
@@ -75,6 +85,7 @@ class Embeddings:
         chunked_documents = await self.tokenize_documents(documents)
         results: List[Dict[str, List]] = []
         for chunk_texts in chunked_documents:
+            # Compute embeddings on lowercased copies (if enabled), but keep original chunks for display/storage
             vectors = await self.encode_batch(chunk_texts)
             results.append({
                 'chunks': chunk_texts,
@@ -83,4 +94,16 @@ class Embeddings:
         return results
     
     def get_text_embeddings(self, text: str) -> List[float]:
-        return self.model.encode(text, normalize_embeddings=True)
+        text_for_embedding = text.casefold() if self.lowercase_for_embedding else text
+        return self.model.encode(text_for_embedding, normalize_embeddings=True)
+
+
+# Singleton instance
+_embeddings_instance = Embeddings()
+
+__all__ = ['Embeddings', 'get_embeddings']
+
+
+def get_embeddings() -> Embeddings:
+    """Get the singleton Embeddings instance (module-level)."""
+    return _embeddings_instance

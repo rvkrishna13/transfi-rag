@@ -1,4 +1,4 @@
-.PHONY: help install ingest query start-api start-webhook clean test
+.PHONY: help install ingest query start-api start-webhook clean test package-src
 
 # Default Python interpreter
 PYTHON := python3
@@ -59,4 +59,11 @@ lint:  ## Run linter (placeholder)
 format:  ## Format code (placeholder)
 	@echo "Formatting code..."
 	@echo "No formatter configured yet."
+
+package-src:  ## Create source-only zip (excludes data/, models/, venv, .git)
+	@echo "Packaging source files into transfi-rag-src.zip..."
+	@zip -r transfi-rag-src.zip api core *.py README.md requirements.txt Makefile tests questions.txt \
+	  -x "data/**" "models/**" "transfi/**" \
+	     ".git/**" "**/__pycache__/**" ".pytest_cache/**" ".DS_Store"
+	@echo "Created transfi-rag-src.zip"
 
