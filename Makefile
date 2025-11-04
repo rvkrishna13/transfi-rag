@@ -1,4 +1,4 @@
-.PHONY: help install ingest query start-api start-webhook clean test package-src
+.PHONY: help install ingest query start-api start-webhook clean clean-all clean-cache clean-models clean-venv test package-src
 
 # Default Python interpreter
 PYTHON := python3
@@ -38,15 +38,34 @@ stop-all:  ## Stop all running servers
 	@pkill -f "webhook_receiver.py" || true
 	@echo "Servers stopped."
 
-clean:  ## Clean generated files (data/raw, data/cleaned, but keep data/vector_db)
+clean:  ## Clean generated files (data/raw, data/cleaned) and caches
 	@echo "Cleaning generated files..."
 	@rm -rf data/raw data/cleaned
+	@find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+	@rm -rf .pytest_cache .DS_Store
 	@echo "Clean complete!"
 
-clean-all:  ## Clean all data including vector DB
+clean-all:  ## Clean all data including vector DB and model cache
 	@echo "Cleaning all data including vector DB..."
 	@rm -rf data/
+	@rm -rf models/all-MiniLM-L6-v2
 	@echo "All data cleaned!"
+
+clean-cache:  ## Clean Python caches (__pycache__, pytest cache)
+	@echo "Cleaning Python caches..."
+	@find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+	@rm -rf .pytest_cache .DS_Store
+	@echo "Caches cleaned!"
+
+clean-models:  ## Remove embedding model cache (will re-download on next run)
+	@echo "Removing model cache..."
+	@rm -rf models/all-MiniLM-L6-v2
+	@echo "Model cache removed."
+
+clean-venv:  ## Remove local virtualenv directory (transfi/) - IRREVERSIBLE
+	@echo "Removing local virtualenv (transfi/)..."
+	@rm -rf transfi/
+	@echo "Virtualenv removed."
 
 test:  ## Run tests (placeholder for future test suite)
 	@echo "Running tests..."

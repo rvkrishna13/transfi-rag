@@ -14,9 +14,21 @@ class Embeddings:
     """Singleton embeddings model for text chunking and embedding generation."""
     
     def __init__(self, chunk_size: int = 400, overlap: int = 80, max_workers: int = 10):
-        self.model_name = './models/all-MiniLM-L6-v2'
-        self.model = SentenceTransformer(self.model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        # Prefer local cache if exists, otherwise auto-download from HF and cache under ./models
+        self.model_repo = 'sentence-transformers/all-MiniLM-L6-v2'
+        self.model_dir = './models/all-MiniLM-L6-v2'
+        try:
+            if os.path.isdir(self.model_dir):
+                self.model = SentenceTransformer(self.model_dir)
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
+            else:
+                os.makedirs(self.model_dir, exist_ok=True)
+                self.model = SentenceTransformer(self.model_repo, cache_folder=self.model_dir)
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_repo, cache_dir=self.model_dir)
+        except Exception:
+            # Final fallback: load by repo name using default cache if custom cache fails
+            self.model = SentenceTransformer(self.model_repo)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_repo)
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.max_workers = max_workers
